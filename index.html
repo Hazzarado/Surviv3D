@@ -135,14 +135,34 @@
         }
         .status-msg { font-size: 15px; color: #8899a6; font-weight: 700; letter-spacing: 1px; }
 
-        .upgrade-grid { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1000px; }
+        .upgrade-grid { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1020px; }
         .upgrade-card {
-            background: rgba(25, 30, 40, 0.9); border: 1px solid #334455; border-top: 4px solid #00ffcc;
-            padding: 25px; width: 280px; border-radius: 8px; cursor: pointer; transition: all 0.3s ease;
-            text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background: rgba(25, 30, 40, 0.92); border: 1px solid #334455; border-top: 4px solid #00ffcc;
+            padding: 24px; width: 290px; border-radius: 8px; cursor: pointer; transition: all 0.3s ease;
+            text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative;
         }
         .upgrade-card:hover { border-top-color: #ffaa00; background: rgba(35, 45, 60, 0.95); transform: translateY(-8px); box-shadow: 0 20px 40px rgba(255,170,0,0.3); }
+
+        /* ESTILO SUPER RARO */
+        .upgrade-card.super-rare {
+            background: linear-gradient(160deg, rgba(45, 18, 68, 0.96) 0%, rgba(22, 24, 42, 0.96) 100%);
+            border: 1px solid #d500f9;
+            border-top: 4px solid #ffd700;
+            box-shadow: 0 0 28px rgba(213, 0, 249, 0.45), inset 0 0 18px rgba(255, 215, 0, 0.12);
+        }
+        .upgrade-card.super-rare:hover {
+            border-color: #ffd700;
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 0 42px rgba(255, 215, 0, 0.65), 0 0 25px rgba(213, 0, 249, 0.6);
+        }
+        .rarity-badge {
+            display: inline-block; font-size: 11px; font-weight: 900; letter-spacing: 2px;
+            padding: 3px 10px; border-radius: 4px; margin-bottom: 10px; text-transform: uppercase;
+            background: linear-gradient(90deg, #d500f9, #ffd700); color: #050505;
+        }
+
         .upgrade-title { font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 10px; }
+        .upgrade-card.super-rare .upgrade-title { color: #ffd700; text-shadow: 0 0 12px rgba(255, 215, 0, 0.45); }
         .upgrade-desc { font-size: 15px; color: #aabbcc; line-height: 1.5; font-weight: 500; }
         .upgrade-stacks { font-size: 13px; color: #ffaa00; margin-top: 12px; font-weight: 800; }
 
@@ -243,6 +263,10 @@
             <div class="hud-label" id="partner-label">Parceiro (Agente 2)</div>
             <div class="hud-value" id="partner-hp-text" style="color:#ffaa00;">100/100</div>
         </div>
+        <div class="hud-card" id="ally-card" style="border-left-color: #64ffda; display: none;">
+            <div class="hud-label">Aliados Recrutados</div>
+            <div class="hud-value" id="ally-count-text" style="color:#64ffda;">0</div>
+        </div>
         <div class="hud-card" style="border-left-color: #ff3366;">
             <div class="hud-label">Patente / Tier</div>
             <div class="hud-value">Nv. <span id="level">1</span> (<span id="xp">0</span>/<span id="maxXp">4</span>) <span id="tierBadge" style="color:#ff3366; font-size:15px;">[T1]</span></div>
@@ -316,30 +340,33 @@
         axe: { name: 'Machado Tomahawk', type: 'melee', damage: 90, fireRate: 800, ammo: 999, reloadTime: 0, range: 4.5, color: 0xffaa00, arc: 360, knockback: 4.0, shake: 0.6 }
     };
 
-    function createAgentRig(bodyHex, visorHex) {
+    function createAgentRig(bodyHex, visorHex, isAllyBot = false) {
         let group = new THREE.Group();
-        let body = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.8, 16), new THREE.MeshStandardMaterial({ color: bodyHex, roughness: 0.5, metalness: 0.2 }));
-        body.position.y = 0.9; body.castShadow = true; group.add(body);
+        let body = new THREE.Mesh(
+            new THREE.CylinderGeometry(isAllyBot ? 0.65 : 0.7, isAllyBot ? 0.65 : 0.7, isAllyBot ? 1.65 : 1.8, 16),
+            new THREE.MeshStandardMaterial({ color: bodyHex, roughness: 0.45, metalness: 0.3 })
+        );
+        body.position.y = isAllyBot ? 0.82 : 0.9; body.castShadow = true; group.add(body);
 
         let visor = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 0.6), new THREE.MeshBasicMaterial({ color: visorHex }));
-        visor.position.set(0, 1.4, 0.45); body.add(visor);
+        visor.position.set(0, 1.3, 0.42); body.add(visor);
 
         let gunGrp = new THREE.Group();
         let meleeGrp = new THREE.Group();
-        gunGrp.position.set(0.6, 1.1, 0.2);
-        meleeGrp.position.set(0.6, 1.1, 0.2);
+        gunGrp.position.set(0.58, 1.05, 0.2);
+        meleeGrp.position.set(0.58, 1.05, 0.2);
 
         let mLight = new THREE.PointLight(0xffddaa, 0, 8);
         mLight.position.set(0, 0, 1.5);
         gunGrp.add(mLight);
 
         let reviveRing = new THREE.Mesh(
-            new THREE.RingGeometry(2.8, 3.2, 32),
-            new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.75 })
+            new THREE.RingGeometry(isAllyBot ? 0.95 : 2.8, isAllyBot ? 1.15 : 3.2, 32),
+            new THREE.MeshBasicMaterial({ color: isAllyBot ? 0x64ffda : 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: isAllyBot ? 0.55 : 0.75 })
         );
         reviveRing.rotation.x = -Math.PI / 2;
         reviveRing.position.y = 0.08;
-        reviveRing.visible = false;
+        reviveRing.visible = isAllyBot;
         group.add(reviveRing);
 
         group.add(gunGrp, meleeGrp);
@@ -419,13 +446,18 @@
             x, z, angle: 0, radius: 0.9, speed: 0.18,
             hp: 100, maxHp: 100, shield: 0, maxShield: 0,
             currentWeapon: 'pistol', lastGun: 'pistol', lastGunMelee: 'katana',
-            ammo: 15, maxAmmo: 15, isReloading: false, lastShot: 0,
+            ammo: 15, maxAmmo: 15, isReloading: false, lastShot: 0, shotCounter: 0,
             damageMult: 1, speedMult: 1, pierceBonus: 0,
             dashCooldown: 0, maxDashCooldown: 80, isDashing: 0,
-            extraPellets: 0, fireBullets: false, vampirism: 0,
+            extraPellets: 0, fireBullets: false, iceBullets: false, vampirism: 0,
+            quantumBounces: 0, elementalist: false, allyCount: 0,
             downed: false, bleedout: 0, maxBleedout: 1200, reviveProgress: 0, invuln: 0,
             meleeAnimProgress: 1,
-            stacks: { multishot: 0, fire: 0, vampire: 0, speed: 0, damage: 0, shield: 0, pierce: 0, dashCd: 0 },
+            stacks: {
+                multishot: 0, fire: 0, ice: 0, vampire: 0, speed: 0,
+                damage: 0, shield: 0, pierce: 0, dashCd: 0,
+                quantum: 0, elementalist: 0, ally: 0
+            },
             waitingUpgrade: false
         };
     }
@@ -462,8 +494,9 @@
     let mousePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     let intersectionPoint = new THREE.Vector3();
 
-    let bullets = [], enemies = [], obstacles = [], lootDrops = [], particles = [], enemyBullets = [], fireZones = [];
+    let bullets = [], enemies = [], allies = [], obstacles = [], lootDrops = [], particles = [], enemyBullets = [], fireZones = [];
     let clientEnemyMap = new Map();
+    let clientAllyMap = new Map();
     let clientBulletMeshes = [];
     let clientEnemyBulletMeshes = [];
     let clientLootMap = new Map();
@@ -474,15 +507,46 @@
     let bossCount = 0;
     let nextEntityId = 1;
 
+    // Configuração de Upgrades (Comuns + Super Raros com peso reduzido)
     const upgradesConfig = {
-        multishot: { title: "Cano Duplo", desc: "+1 Projétil por Disparo", max: 3, apply: (ag) => ag.extraPellets += 1 },
-        fire: { title: "Munição Incendiária", desc: "Seus tiros incendeiam o solo", max: 1, apply: (ag) => ag.fireBullets = true },
-        vampire: { title: "Vampirismo", desc: "Recupera 5 HP por Abate", max: 3, apply: (ag) => ag.vampirism += 5 },
-        speed: { title: "Botas Táticas", desc: "+20% Velocidade", max: 3, apply: (ag) => ag.speedMult += 0.20 },
-        damage: { title: "Calibre Pesado", desc: "+30% de Dano", max: 4, apply: (ag) => ag.damageMult += 0.30 },
-        shield: { title: "Gerador de Escudo", desc: "+50pts de Escudo", max: 3, apply: (ag) => { ag.maxShield += 50; ag.shield = ag.maxShield; } },
-        pierce: { title: "Munição AP", desc: "Tiros perfuram +1 alvo", max: 2, apply: (ag) => ag.pierceBonus += 1 },
-        dashCd: { title: "Refluxo Motor", desc: "-25% Recarga do Dash", max: 2, apply: (ag) => ag.maxDashCooldown = Math.floor(ag.maxDashCooldown * 0.75) }
+        multishot: { title: "Cano Duplo", desc: "+1 Projétil por Disparo", rarity: "common", weight: 100, max: 3, apply: (ag) => ag.extraPellets += 1 },
+        fire: { title: "Munição Incendiária", desc: "Incendeia inimigos e o solo", rarity: "common", weight: 100, max: 1, apply: (ag) => ag.fireBullets = true },
+        ice: { title: "Munição Criogênica", desc: "Tiros de gelo reduzem velocidade em 40%", rarity: "common", weight: 100, max: 1, apply: (ag) => ag.iceBullets = true },
+        vampire: { title: "Vampirismo", desc: "Recupera 5 HP por Abate", rarity: "common", weight: 100, max: 3, apply: (ag) => ag.vampirism += 5 },
+        speed: { title: "Botas Táticas", desc: "+20% Velocidade", rarity: "common", weight: 100, max: 3, apply: (ag) => ag.speedMult += 0.20 },
+        damage: { title: "Calibre Pesado", desc: "+30% de Dano", rarity: "common", weight: 100, max: 4, apply: (ag) => ag.damageMult += 0.30 },
+        shield: { title: "Gerador de Escudo", desc: "+50pts de Escudo", rarity: "common", weight: 100, max: 3, apply: (ag) => { ag.maxShield += 50; ag.shield = ag.maxShield; } },
+        pierce: { title: "Munição AP", desc: "Tiros perfuram +1 alvo", rarity: "common", weight: 100, max: 2, apply: (ag) => ag.pierceBonus += 1 },
+        dashCd: { title: "Refluxo Motor", desc: "-25% Recarga do Dash", rarity: "common", weight: 100, max: 2, apply: (ag) => ag.maxDashCooldown = Math.floor(ag.maxDashCooldown * 0.75) },
+
+        // HABILIDADES SUPER RARAS
+        quantum: {
+            title: "Projétil Quântico",
+            desc: "Tiros ricocheteiam nas paredes (+3 rebatidas), perdendo força mas ganhando +15% de dano crítico por rebatida.",
+            rarity: "super_rare",
+            weight: 14,
+            max: 2,
+            apply: (ag) => { ag.quantumBounces += 3; }
+        },
+        elementalist: {
+            title: "Corrente Elementalist",
+            desc: "Infunde tiros com Gelo. Atingir um inimigo pegando fogo cria uma Explosão de Vapor que cega inimigos próximos.",
+            rarity: "super_rare",
+            weight: 14,
+            max: 1,
+            apply: (ag) => { ag.elementalist = true; ag.iceBullets = true; }
+        },
+        ally: {
+            title: "Inimigo Amigo",
+            desc: "Converte um inimigo para lutar ao seu lado armado com um fuzil automático para eliminar ameaças.",
+            rarity: "super_rare",
+            weight: 12,
+            max: 2,
+            apply: (ag) => {
+                ag.allyCount += 1;
+                if (isHost) recruitAllyForAgent(ag);
+            }
+        }
     };
 
     // ================= LOBBY & PEERJS =================
@@ -760,6 +824,188 @@
         setTimeout(() => el.remove(), 800);
     }
 
+    // ================= INIMIGO AMIGO (ALIADO COM ARMA) =================
+    function recruitAllyForAgent(ownerAgent) {
+        if (!isHost) return;
+        let spawnX = ownerAgent.x + (Math.random() - 0.5) * 4;
+        let spawnZ = ownerAgent.z + (Math.random() - 0.5) * 4;
+
+        // Procura o inimigo comum mais próximo para converter para o seu lado
+        let bestIdx = -1;
+        let bestDist = 45;
+        for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].type === 'boss') continue;
+            let d = Math.hypot(enemies[i].mesh.position.x - ownerAgent.x, enemies[i].mesh.position.z - ownerAgent.z);
+            if (d < bestDist) {
+                bestDist = d;
+                bestIdx = i;
+            }
+        }
+
+        if (bestIdx !== -1) {
+            let converted = enemies[bestIdx];
+            spawnX = converted.mesh.position.x;
+            spawnZ = converted.mesh.position.z;
+            scene.remove(converted.mesh);
+            enemies.splice(bestIdx, 1);
+            spawnParticles(spawnX, 1.5, spawnZ, 0x64ffda, 35, 1.4);
+            showDamageText(spawnX, 2.8, spawnZ, "CONVERTIDO!", "#64ffda");
+        } else {
+            spawnParticles(spawnX, 1.5, spawnZ, 0x64ffda, 30, 1.2);
+            showDamageText(spawnX, 2.8, spawnZ, "ALIADO EM CAMPO!", "#64ffda");
+        }
+
+        let rig = createAgentRig(0x1b3b5a, 0x64ffda, true);
+        buildWeaponModelForRig(rig, 'rifle');
+        let maxHp = 280 + (squad.level * 30);
+
+        allies.push({
+            id: nextEntityId++,
+            owner: ownerAgent,
+            ownerIdx: ownerAgent === p1 ? 1 : 2,
+            rig,
+            x: spawnX,
+            z: spawnZ,
+            angle: 0,
+            hp: maxHp,
+            maxHp: maxHp,
+            lastShot: 0,
+            respawnTimer: 0
+        });
+        updateUI();
+    }
+
+    function updateAllies() {
+        if (!isHost || allies.length === 0) return;
+
+        for (let al of allies) {
+            if (al.respawnTimer > 0) {
+                al.respawnTimer--;
+                al.rig.group.visible = false;
+                if (al.respawnTimer === 0) {
+                    al.x = al.owner.x + 2;
+                    al.z = al.owner.z + 2;
+                    al.hp = al.maxHp;
+                    al.rig.group.visible = true;
+                    spawnParticles(al.x, 1.5, al.z, 0x64ffda, 25, 1.2);
+                    showDamageText(al.x, 2.5, al.z, "ALIADO RETORNOU!", "#64ffda");
+                }
+                continue;
+            }
+
+            // Encontra o inimigo mais próximo do aliado ou do dono
+            let targetEnemy = null;
+            let bestEnemyDist = 36;
+            for (let en of enemies) {
+                let d = Math.hypot(en.mesh.position.x - al.x, en.mesh.position.z - al.z);
+                if (d < bestEnemyDist) {
+                    bestEnemyDist = d;
+                    targetEnemy = en;
+                }
+            }
+
+            // Movimentação tática perto do dono
+            let distOwner = Math.hypot(al.owner.x - al.x, al.owner.z - al.z);
+            let moveSpeed = 0.16;
+
+            if (distOwner > 6.5) {
+                let aOwner = Math.atan2(al.owner.z - al.z, al.owner.x - al.x);
+                al.x += Math.cos(aOwner) * moveSpeed;
+                al.z += Math.sin(aOwner) * moveSpeed;
+            } else if (distOwner < 3.0) {
+                let aAway = Math.atan2(al.z - al.owner.z, al.x - al.owner.x);
+                al.x += Math.cos(aAway) * (moveSpeed * 0.7);
+                al.z += Math.sin(aAway) * (moveSpeed * 0.7);
+            } else if (targetEnemy) {
+                // Strafe lateral enquanto combate
+                let aStrafe = Math.atan2(targetEnemy.mesh.position.z - al.z, targetEnemy.mesh.position.x - al.x) + Math.PI / 2;
+                al.x += Math.cos(aStrafe) * (moveSpeed * 0.45);
+                al.z += Math.sin(aStrafe) * (moveSpeed * 0.45);
+            }
+
+            al.x = Math.max(-94, Math.min(94, al.x));
+            al.z = Math.max(-94, Math.min(94, al.z));
+
+            // Mira e dispara com seu fuzil HK416
+            if (targetEnemy) {
+                al.angle = Math.atan2(targetEnemy.mesh.position.z - al.z, targetEnemy.mesh.position.x - al.x);
+                let now = Date.now();
+                if (now - al.lastShot > 240) {
+                    al.lastShot = now;
+                    al.rig.muzzleLight.intensity = 2.0;
+
+                    let spread = (Math.random() - 0.5) * 0.05;
+                    let shotAngle = al.angle + spread;
+                    let bColor = 0x64ffda;
+                    let bMesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshBasicMaterial({ color: bColor }));
+                    bMesh.position.set(al.x + Math.cos(shotAngle), 1.15, al.z + Math.sin(shotAngle));
+                    scene.add(bMesh);
+
+                    bullets.push({
+                        mesh: bMesh,
+                        owner: al.owner,
+                        colorHex: bColor,
+                        vx: Math.cos(shotAngle) * 1.45,
+                        vz: Math.sin(shotAngle) * 1.45,
+                        dmg: 18 * al.owner.damageMult,
+                        life: 110,
+                        pierce: al.owner.pierceBonus,
+                        explosive: false,
+                        bouncesLeft: al.owner.quantumBounces > 0 ? 1 : 0,
+                        bouncesDone: 0,
+                        critChance: 0.1,
+                        critBonus: 0,
+                        isFire: false,
+                        isIce: false,
+                        lastBounceObs: null,
+                        hitTargets: new Set()
+                    });
+                }
+            } else {
+                al.angle = al.owner.angle;
+            }
+
+            al.rig.group.position.set(al.x, 0, al.z);
+            al.rig.group.rotation.y = Math.atan2(Math.sin(al.angle), Math.cos(al.angle)) * -1 + Math.PI / 2;
+            al.rig.reviveRing.rotation.z += 0.03;
+            if (al.rig.muzzleLight.intensity > 0) al.rig.muzzleLight.intensity -= 0.3;
+        }
+    }
+
+    // ================= EXPLOSÃO DE VAPOR (CORRENTE ELEMENTALIST) =================
+    function spawnSteamExplosion(x, z, ownerAgent) {
+        let radius = 8.0;
+        let steamDmg = 42 * (ownerAgent ? ownerAgent.damageMult : 1);
+
+        // Nuvem densa de vapor branco/ciano
+        spawnParticles(x, 1.5, z, 0xe0f7fa, 45, 1.6);
+        let cloud = new THREE.Mesh(
+            new THREE.SphereGeometry(radius, 18, 18),
+            new THREE.MeshBasicMaterial({ color: 0xe0f7fa, transparent: true, opacity: 0.55 })
+        );
+        cloud.position.set(x, 1.2, z);
+        scene.add(cloud);
+        setTimeout(() => scene.remove(cloud), 320);
+
+        showDamageText(x, 3.0, z, "EXPLOSÃO DE VAPOR! CEGUEIRA", "#e0f7fa");
+        cameraShake = 0.7;
+
+        if (isHost) {
+            for (let en of enemies) {
+                let dist = Math.hypot(en.mesh.position.x - x, en.mesh.position.z - z);
+                if (dist <= radius + (en.type === 'boss' ? 2.0 : 0)) {
+                    en.hp -= steamDmg;
+                    en.blindTimer = 240; // 4 segundos cegos
+                    en.wanderAngle = Math.random() * Math.PI * 2;
+                    showDamageText(en.mesh.position.x, 2.2, en.mesh.position.z, Math.round(steamDmg), "#b2ebf2");
+                }
+            }
+            if (isCoop && conn && conn.open) {
+                conn.send({ type: 'fxSteam', x, z, radius });
+            }
+        }
+    }
+
     // ================= DIFICULDADE & BOSS =================
     function getThreatTier() {
         return Math.floor(squad.level / 10);
@@ -824,10 +1070,15 @@
             hp: maxHp,
             maxHp: maxHp,
             speed: 0.065 + (tier * 0.012),
+            baseSpeed: 0.065 + (tier * 0.012),
             color: 0xff0033,
             attackCd: 40,
             specialCd: 130,
-            dashFrames: 0
+            dashFrames: 0,
+            burnTimer: 0,
+            chillTimer: 0,
+            blindTimer: 0,
+            wanderAngle: 0
         });
         cameraShake = 1.0;
     }
@@ -883,11 +1134,12 @@
             id: nextEntityId++,
             mesh: visual.mesh,
             type, hp, maxHp: hp, speed, baseSpeed: speed,
-            color: visual.color, attackCd: 0
+            color: visual.color, attackCd: 0,
+            burnTimer: 0, chillTimer: 0, blindTimer: 0, wanderAngle: 0
         });
     }
 
-    // ================= XP & UPGRADES (CORRIGIDO) =================
+    // ================= XP & UPGRADES (SORTEIO POR RARIDADE) =================
     function addXp(amount) {
         squad.xp += amount;
         if (squad.xp >= squad.maxXp) {
@@ -946,7 +1198,6 @@
             updateUI();
             sendWorldStateToClient(true);
         } else if (!p1.waitingUpgrade && p2.waitingUpgrade) {
-            // Host escolheu primeiro: limpa os cards do Host e aguarda o Client
             document.getElementById('upgrade-options').innerHTML = '';
             document.getElementById('upgrade-subtitle').innerText = 'Aguardando parceiro escolher aprimoramento...';
             if (!hostFailsafeTimer) {
@@ -957,7 +1208,6 @@
                 }, 6000);
             }
         } else if (p1.waitingUpgrade && !p2.waitingUpgrade) {
-            // Parceiro (Client) escolheu primeiro: mantém os cards do Host visíveis!
             document.getElementById('upgrade-subtitle').innerText = '✅ Parceiro já escolheu! Selecione o seu aprimoramento:';
         }
     }
@@ -967,6 +1217,28 @@
         p1.waitingUpgrade = false;
         p2.waitingUpgrade = false;
         checkAllUpgradesDone();
+    }
+
+    function pickWeightedUpgrades(availableKeys, count) {
+        let pool = [...availableKeys];
+        let picked = [];
+
+        while (picked.length < count && pool.length > 0) {
+            let totalWeight = pool.reduce((sum, k) => sum + (upgradesConfig[k].weight || 100), 0);
+            let roll = Math.random() * totalWeight;
+            let chosenIdx = 0;
+
+            for (let i = 0; i < pool.length; i++) {
+                roll -= (upgradesConfig[pool[i]].weight || 100);
+                if (roll <= 0) {
+                    chosenIdx = i;
+                    break;
+                }
+            }
+            picked.push(pool[chosenIdx]);
+            pool.splice(chosenIdx, 1);
+        }
+        return picked;
     }
 
     function openUpgradeCardsForAgent(agent, onSelectCallback) {
@@ -980,13 +1252,19 @@
         document.getElementById('upgrade-subtitle').innerText = 'Selecione um aprimoramento de campo';
         let optionsDiv = document.getElementById('upgrade-options');
         optionsDiv.innerHTML = '';
-        let shuffled = available.sort(() => 0.5 - Math.random()).slice(0, 3);
+        let chosenKeys = pickWeightedUpgrades(available, 3);
 
-        shuffled.forEach(key => {
+        chosenKeys.forEach(key => {
             let up = upgradesConfig[key];
+            let isSuperRare = up.rarity === 'super_rare';
             let card = document.createElement('div');
-            card.className = 'upgrade-card';
-            card.innerHTML = `<div class="upgrade-title">${up.title}</div><div class="upgrade-desc">${up.desc}</div><div class="upgrade-stacks">Upgrade Nível ${agent.stacks[key] + 1}</div>`;
+            card.className = isSuperRare ? 'upgrade-card super-rare' : 'upgrade-card';
+            card.innerHTML = `
+                ${isSuperRare ? '<div class="rarity-badge">★ SUPER RARO ★</div>' : ''}
+                <div class="upgrade-title">${up.title}</div>
+                <div class="upgrade-desc">${up.desc}</div>
+                <div class="upgrade-stacks">Upgrade Nível ${agent.stacks[key] + 1}${up.max > 1 ? ` / ${up.max}` : ' (Único)'}</div>
+            `;
             card.onclick = () => onSelectCallback(key);
             optionsDiv.appendChild(card);
         });
@@ -1090,6 +1368,7 @@
 
         if (now - agent.lastShot > w.fireRate) {
             agent.lastShot = now;
+            agent.shotCounter++;
             if ((isHost && agent === p1) || (!isHost && agent === p2)) cameraShake = w.shake;
 
             if (w.type === 'gun') rig.muzzleLight.intensity = 2.5;
@@ -1109,6 +1388,15 @@
                         if (w.arc === 360 || angleDiff <= Math.PI / 2) {
                             let dmg = w.damage * agent.damageMult;
                             en.hp -= dmg;
+                            if (agent.fireBullets) en.burnTimer = Math.max(en.burnTimer, 180);
+                            if (agent.iceBullets) {
+                                if (en.burnTimer > 0 && agent.elementalist) {
+                                    en.burnTimer = 0;
+                                    spawnSteamExplosion(en.mesh.position.x, en.mesh.position.z, agent);
+                                } else {
+                                    en.chillTimer = Math.max(en.chillTimer, 180);
+                                }
+                            }
                             showDamageText(en.mesh.position.x, 2, en.mesh.position.z, dmg, "#ffffff");
                             spawnParticles(en.mesh.position.x, 1.2, en.mesh.position.z, w.color, 8, 1);
                             applyKnockback(en, agent.x, agent.z, w.knockback);
@@ -1120,10 +1408,18 @@
                 agent.ammo--;
                 if (agent === p1) updateUI();
 
+                // Se tem Elementalist sem Munição Incendiária, alterna tiros de Fogo e Gelo para permitir combar sozinho
+                let isFireShot = agent.fireBullets || (agent.elementalist && !agent.fireBullets && agent.shotCounter % 2 === 1);
+                let isIceShot = agent.iceBullets && !(agent.elementalist && !agent.fireBullets && agent.shotCounter % 2 === 1);
+
                 let totalPellets = w.pellets + agent.extraPellets;
                 for (let i = 0; i < totalPellets; i++) {
                     let spreadAngle = agent.angle + (Math.random() - 0.5) * w.spread;
-                    let bColor = agent.fireBullets ? 0xff4400 : w.color;
+                    let bColor = w.color;
+                    if (isFireShot) bColor = 0xff4400;
+                    else if (isIceShot) bColor = 0x00e5ff;
+                    else if (agent.quantumBounces > 0) bColor = 0xd500f9;
+
                     let bMesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshBasicMaterial({ color: bColor }));
                     bMesh.position.set(agent.x + Math.cos(spreadAngle), 1.2, agent.z + Math.sin(spreadAngle));
                     scene.add(bMesh);
@@ -1135,9 +1431,16 @@
                         vx: Math.cos(spreadAngle) * w.bulletSpeed,
                         vz: Math.sin(spreadAngle) * w.bulletSpeed,
                         dmg: w.damage * agent.damageMult,
-                        life: 120,
+                        life: 140 + (agent.quantumBounces * 25),
                         pierce: w.pierce + agent.pierceBonus,
                         explosive: w.explosive,
+                        bouncesLeft: agent.quantumBounces,
+                        bouncesDone: 0,
+                        critChance: 0.05,
+                        critBonus: 0,
+                        isFire: isFireShot,
+                        isIce: isIceShot,
+                        lastBounceObs: null,
                         hitTargets: new Set()
                     });
                 }
@@ -1255,6 +1558,8 @@
             showTierAlert(data.tier);
         } else if (data.type === 'fxExplosion') {
             spawnExplosion(data.x, 1.2, data.z, data.radius, 0, data.color);
+        } else if (data.type === 'fxSteam') {
+            spawnSteamExplosion(data.x, data.z, null);
         } else if (data.type === 'gameOver') {
             gameState = 'GAMEOVER';
             document.getElementById('gameover-stats').innerText = data.stats;
@@ -1291,7 +1596,11 @@
                 id: e.id, type: e.type,
                 x: +e.mesh.position.x.toFixed(2), z: +e.mesh.position.z.toFixed(2),
                 ry: +e.mesh.rotation.y.toFixed(2),
-                hp: Math.ceil(e.hp), maxHp: Math.ceil(e.maxHp), name: e.name || ''
+                hp: Math.ceil(e.hp), maxHp: Math.ceil(e.maxHp), name: e.name || '',
+                burn: e.burnTimer > 0, chill: e.chillTimer > 0, blind: e.blindTimer > 0
+            })),
+            allies: allies.filter(a => a.respawnTimer <= 0).map(a => ({
+                id: a.id, x: +a.x.toFixed(2), z: +a.z.toFixed(2), angle: +a.angle.toFixed(2)
             })),
             bullets: bullets.map(b => ({
                 x: +b.mesh.position.x.toFixed(2), z: +b.mesh.position.z.toFixed(2), c: b.colorHex
@@ -1334,6 +1643,27 @@
             snap.obsPositions.forEach(pos => createObstacleMesh(pos.x, pos.z));
         }
 
+        // Sincroniza Aliados Recrutados
+        const seenAllyIds = new Set();
+        (snap.allies || []).forEach(ad => {
+            seenAllyIds.add(ad.id);
+            let entry = clientAllyMap.get(ad.id);
+            if (!entry) {
+                let rig = createAgentRig(0x1b3b5a, 0x64ffda, true);
+                buildWeaponModelForRig(rig, 'rifle');
+                entry = { rig, tx: ad.x, tz: ad.z, tangle: ad.angle };
+                clientAllyMap.set(ad.id, entry);
+            }
+            entry.tx = ad.x; entry.tz = ad.z; entry.tangle = ad.angle;
+        });
+        for (let [id, entry] of clientAllyMap.entries()) {
+            if (!seenAllyIds.has(id)) {
+                scene.remove(entry.rig.group);
+                clientAllyMap.delete(id);
+            }
+        }
+
+        // Sincroniza Inimigos & Boss
         const seenEnemyIds = new Set();
         let activeBoss = null;
 
@@ -1351,6 +1681,11 @@
                 clientEnemyMap.set(ed.id, entry);
             }
             entry.tx = ed.x; entry.tz = ed.z; entry.try = ed.ry;
+            if (ed.type !== 'boss' && entry.mesh.material) {
+                if (ed.blind) entry.mesh.material.color.setHex(0xe0f7fa);
+                else if (ed.burn) entry.mesh.material.color.setHex(0xff5500);
+                else if (ed.chill) entry.mesh.material.color.setHex(0x00e5ff);
+            }
             if (ed.type === 'boss') activeBoss = ed;
         });
 
@@ -1381,7 +1716,7 @@
         }
 
         updateBossHUD(activeBoss);
-        updateUI();
+        updateUI(clientAllyMap.size);
     }
 
     function syncSimpleSpherePool(pool, items, radius) {
@@ -1445,13 +1780,19 @@
         }
     }
 
-    function updateUI() {
+    function updateUI(overrideAllyCount = null) {
         let me = isHost ? p1 : p2;
         let partner = isHost ? p2 : p1;
 
         document.getElementById('hp').innerText = me.downed ? 'CAÍDO' : Math.ceil(Math.max(0, me.hp));
         document.getElementById('maxHp').innerText = me.maxHp;
         document.getElementById('shieldContainer').innerText = me.maxShield > 0 ? ` (+${Math.ceil(me.shield)} Escudo)` : '';
+
+        let activeAllies = overrideAllyCount !== null ? overrideAllyCount : allies.length;
+        if (activeAllies > 0) {
+            document.getElementById('ally-card').style.display = 'block';
+            document.getElementById('ally-count-text').innerText = activeAllies;
+        }
 
         if (isCoop) {
             const pText = document.getElementById('partner-hp-text');
@@ -1548,18 +1889,21 @@
             updateReviveSystem();
         }
 
+        updateAllies();
         updateRigVisuals(p1, rig1);
         if (isCoop) updateRigVisuals(p2, rig2);
 
         updateDashBar(p1);
         updateCamera(p1);
 
+        // Zonas de fogo no solo
         for (let i = fireZones.length - 1; i >= 0; i--) {
             let fz = fireZones[i]; fz.life--;
             for (let en of enemies) {
                 let radiusCheck = en.type === 'boss' ? 3.2 : 1.5;
                 if (Math.hypot(fz.mesh.position.x - en.mesh.position.x, fz.mesh.position.z - en.mesh.position.z) < radiusCheck) {
                     en.hp -= 0.5;
+                    en.burnTimer = Math.max(en.burnTimer, 120);
                 }
             }
             if (fz.life <= 0) { scene.remove(fz.mesh); fireZones.splice(i, 1); }
@@ -1567,35 +1911,103 @@
 
         updateParticles();
 
+        // Projéteis dos Agentes e Aliados (com Projétil Quântico & Reações Elementais)
         for (let i = bullets.length - 1; i >= 0; i--) {
             let b = bullets[i];
             b.mesh.position.x += b.vx; b.mesh.position.z += b.vz; b.life--;
             if (Math.random() > 0.5) spawnParticles(b.mesh.position.x, b.mesh.position.y, b.mesh.position.z, b.colorHex, 1, 0.1);
 
-            let hitSomething = false;
-            for (let obs of obstacles) {
-                if (Math.hypot(b.mesh.position.x - obs.mesh.position.x, b.mesh.position.z - obs.mesh.position.z) < obs.radius) { hitSomething = true; break; }
+            let destroyBullet = false;
+
+            // 1. Colisão com Paredes da Arena (Projétil Quântico ricocheteia)
+            if (Math.abs(b.mesh.position.x) >= 96 || Math.abs(b.mesh.position.z) >= 96) {
+                if (b.bouncesLeft > 0) {
+                    if (Math.abs(b.mesh.position.x) >= 96) {
+                        b.mesh.position.x = Math.sign(b.mesh.position.x) * 95.8;
+                        b.vx = -b.vx;
+                    }
+                    if (Math.abs(b.mesh.position.z) >= 96) {
+                        b.mesh.position.z = Math.sign(b.mesh.position.z) * 95.8;
+                        b.vz = -b.vz;
+                    }
+                    applyQuantumBounce(b);
+                } else {
+                    destroyBullet = true;
+                }
             }
 
-            if (!hitSomething) {
-                for (let en of enemies) {
-                    if (b.hitTargets.has(en)) continue;
-                    let hitbox = en.type === 'boss' ? 2.8 : (en.type === 'tank' ? 2.0 : 1.3);
-                    if (Math.hypot(b.mesh.position.x - en.mesh.position.x, b.mesh.position.z - en.mesh.position.z) < hitbox) {
-                        en.hp -= b.dmg;
-                        showDamageText(en.mesh.position.x, en.type === 'boss' ? 4 : 2, en.mesh.position.z, b.dmg, "#ffffff");
-                        spawnParticles(en.mesh.position.x, 1.2, en.mesh.position.z, en.color, 5, 0.5);
-                        b.hitTargets.add(en);
-
-                        if (b.explosive) { spawnExplosion(b.mesh.position.x, 1.2, b.mesh.position.z, 4.0, b.dmg * 1.5, 0xff4400); hitSomething = true; }
-                        else if (b.pierce > 0) { b.pierce--; }
-                        else { hitSomething = true; }
+            // 2. Colisão com Obstáculos / Pilares
+            if (!destroyBullet) {
+                for (let obs of obstacles) {
+                    let dx = b.mesh.position.x - obs.mesh.position.x;
+                    let dz = b.mesh.position.z - obs.mesh.position.z;
+                    if (Math.hypot(dx, dz) < obs.radius) {
+                        if (b.bouncesLeft > 0 && b.lastBounceObs !== obs) {
+                            b.lastBounceObs = obs;
+                            if (Math.abs(dx) > Math.abs(dz)) {
+                                b.vx = -b.vx;
+                                b.mesh.position.x = obs.mesh.position.x + Math.sign(dx || 1) * (obs.radius + 0.15);
+                            } else {
+                                b.vz = -b.vz;
+                                b.mesh.position.z = obs.mesh.position.z + Math.sign(dz || 1) * (obs.radius + 0.15);
+                            }
+                            applyQuantumBounce(b);
+                        } else {
+                            destroyBullet = true;
+                        }
                         break;
                     }
                 }
             }
 
-            if (hitSomething || b.life <= 0 || Math.abs(b.mesh.position.x) > 100 || Math.abs(b.mesh.position.z) > 100) {
+            // 3. Colisão com Inimigos
+            if (!destroyBullet) {
+                for (let en of enemies) {
+                    if (b.hitTargets.has(en)) continue;
+                    let hitbox = en.type === 'boss' ? 2.8 : (en.type === 'tank' ? 2.0 : 1.3);
+                    if (Math.hypot(b.mesh.position.x - en.mesh.position.x, b.mesh.position.z - en.mesh.position.z) < hitbox) {
+                        let isCrit = Math.random() < b.critChance;
+                        let critMult = isCrit ? (1.5 + b.critBonus) : 1.0;
+                        let finalDmg = b.dmg * critMult;
+
+                        en.hp -= finalDmg;
+                        showDamageText(
+                            en.mesh.position.x,
+                            en.type === 'boss' ? 4 : 2,
+                            en.mesh.position.z,
+                            isCrit ? `CRIT! ${Math.round(finalDmg)}` : finalDmg,
+                            isCrit ? "#ffd700" : "#ffffff"
+                        );
+                        spawnParticles(en.mesh.position.x, 1.2, en.mesh.position.z, isCrit ? 0xd500f9 : en.color, 5, 0.5);
+                        b.hitTargets.add(en);
+
+                        // Aplica status elementais (Fogo, Gelo e Corrente Elementalist)
+                        if (b.isFire) {
+                            en.burnTimer = Math.max(en.burnTimer, 180);
+                        }
+                        if (b.isIce) {
+                            if (en.burnTimer > 0 && b.owner && b.owner.elementalist) {
+                                en.burnTimer = 0;
+                                spawnSteamExplosion(en.mesh.position.x, en.mesh.position.z, b.owner);
+                            } else {
+                                en.chillTimer = Math.max(en.chillTimer, 180);
+                            }
+                        }
+
+                        if (b.explosive) {
+                            spawnExplosion(b.mesh.position.x, 1.2, b.mesh.position.z, 4.0, finalDmg * 1.5, 0xff4400);
+                            destroyBullet = true;
+                        } else if (b.pierce > 0) {
+                            b.pierce--;
+                        } else {
+                            destroyBullet = true;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (destroyBullet || b.life <= 0) {
                 if (b.explosive && b.life > 0) spawnExplosion(b.mesh.position.x, 1.2, b.mesh.position.z, 4.0, b.dmg * 1.5, 0xff4400);
                 if (b.owner && b.owner.fireBullets) {
                     let fMesh = new THREE.Mesh(new THREE.RingGeometry(0.5, 1.5, 12), new THREE.MeshBasicMaterial({ color: 0xff4400, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
@@ -1607,6 +2019,7 @@
             }
         }
 
+        // Projéteis Inimigos
         for (let i = enemyBullets.length - 1; i >= 0; i--) {
             let eb = enemyBullets[i];
             eb.mesh.position.x += eb.vx; eb.mesh.position.z += eb.vz; eb.life--;
@@ -1623,6 +2036,7 @@
             if (hitObs || eb.life <= 0) { scene.remove(eb.mesh); enemyBullets.splice(i, 1); }
         }
 
+        // Coleta de Loot
         for (let i = lootDrops.length - 1; i >= 0; i--) {
             let l = lootDrops[i];
             l.mesh.rotation.y += l.rotSpeed; l.mesh.rotation.x += l.rotSpeed;
@@ -1643,24 +2057,52 @@
             }
         }
 
+        // IA dos Inimigos & Boss
         let activeBoss = null;
         let bulletSpeedBonus = tier * 0.12;
 
         for (let i = enemies.length - 1; i >= 0; i--) {
             let en = enemies[i];
 
-            let target = p1;
-            if (isCoop) {
-                if (p1.downed && !p2.downed) target = p2;
-                else if (!p1.downed && !p2.downed) {
-                    let d1 = Math.hypot(p1.x - en.mesh.position.x, p1.z - en.mesh.position.z);
-                    let d2 = Math.hypot(p2.x - en.mesh.position.x, p2.z - en.mesh.position.z);
-                    target = d2 < d1 ? p2 : p1;
+            // Status contínuos: Queimadura, Gelo e Cegueira
+            if (en.burnTimer > 0) {
+                en.burnTimer--;
+                en.hp -= 0.18;
+                if (en.burnTimer % 10 === 0) spawnParticles(en.mesh.position.x, 1.4, en.mesh.position.z, 0xff5500, 1, 0.25);
+            }
+            if (en.chillTimer > 0) {
+                en.chillTimer--;
+                if (en.chillTimer % 14 === 0) spawnParticles(en.mesh.position.x, 1.2, en.mesh.position.z, 0x00e5ff, 1, 0.15);
+            }
+            if (en.blindTimer > 0) {
+                en.blindTimer--;
+                if (en.blindTimer % 12 === 0) spawnParticles(en.mesh.position.x, 1.8, en.mesh.position.z, 0xe0f7fa, 1, 0.2);
+                if (Math.random() < 0.06) en.wanderAngle += (Math.random() - 0.5) * 2.5;
+            }
+
+            let speedMultStatus = (en.chillTimer > 0 ? 0.6 : 1.0) * (en.blindTimer > 0 ? 0.55 : 1.0);
+
+            // Escolhe alvo mais próximo (entre jogadores vivos e aliados recrutados)
+            let target = { x: p1.x, z: p1.z, isAlly: false };
+            let candidateTargets = [];
+            if (!p1.downed) candidateTargets.push({ x: p1.x, z: p1.z, ref: p1, isAlly: false });
+            if (isCoop && !p2.downed) candidateTargets.push({ x: p2.x, z: p2.z, ref: p2, isAlly: false });
+            for (let al of allies) {
+                if (al.respawnTimer <= 0) candidateTargets.push({ x: al.x, z: al.z, ref: al, isAlly: true });
+            }
+
+            if (candidateTargets.length > 0) {
+                let bestD = Infinity;
+                for (let ct of candidateTargets) {
+                    let d = Math.hypot(ct.x - en.mesh.position.x, ct.z - en.mesh.position.z);
+                    if (d < bestD) { bestD = d; target = ct; }
                 }
             }
 
             let distToTarget = Math.hypot(target.x - en.mesh.position.x, target.z - en.mesh.position.z);
-            let angle = Math.atan2(target.z - en.mesh.position.z, target.x - en.mesh.position.x);
+            let angle = en.blindTimer > 0
+                ? en.wanderAngle
+                : Math.atan2(target.z - en.mesh.position.z, target.x - en.mesh.position.x);
 
             if (en.type === 'boss') {
                 activeBoss = en;
@@ -1676,41 +2118,43 @@
                     }
                 }
 
-                en.specialCd--;
-                if (en.specialCd <= 0) {
-                    let attackRoll = Math.random();
-                    if (attackRoll < 0.4) {
-                        for (let p = 0; p < 14; p++) {
-                            let a = (Math.PI * 2 / 14) * p;
-                            let ebMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshBasicMaterial({ color: 0xff0033 }));
-                            ebMesh.position.set(en.mesh.position.x, 1.3, en.mesh.position.z);
-                            scene.add(ebMesh);
-                            enemyBullets.push({ mesh: ebMesh, vx: Math.cos(a) * (0.42 + bulletSpeedBonus), vz: Math.sin(a) * (0.42 + bulletSpeedBonus), life: 130, dmg: 22, color: 0xff0033 });
+                if (en.blindTimer <= 0) {
+                    en.specialCd--;
+                    if (en.specialCd <= 0) {
+                        let attackRoll = Math.random();
+                        if (attackRoll < 0.4) {
+                            for (let p = 0; p < 14; p++) {
+                                let a = (Math.PI * 2 / 14) * p;
+                                let ebMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshBasicMaterial({ color: 0xff0033 }));
+                                ebMesh.position.set(en.mesh.position.x, 1.3, en.mesh.position.z);
+                                scene.add(ebMesh);
+                                enemyBullets.push({ mesh: ebMesh, vx: Math.cos(a) * (0.42 + bulletSpeedBonus), vz: Math.sin(a) * (0.42 + bulletSpeedBonus), life: 130, dmg: 22, color: 0xff0033 });
+                            }
+                            en.specialCd = 150;
+                        } else if (attackRoll < 0.75) {
+                            for (let s = -2; s <= 2; s++) {
+                                let a = angle + (s * 0.14);
+                                let ebMesh = new THREE.Mesh(new THREE.SphereGeometry(0.35), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+                                ebMesh.position.set(en.mesh.position.x, 1.3, en.mesh.position.z);
+                                scene.add(ebMesh);
+                                enemyBullets.push({ mesh: ebMesh, vx: Math.cos(a) * (0.58 + bulletSpeedBonus), vz: Math.sin(a) * (0.58 + bulletSpeedBonus), life: 110, dmg: 20, color: 0xffaa00 });
+                            }
+                            en.specialCd = 130;
+                        } else {
+                            en.dashFrames = 28;
+                            en.specialCd = 160;
+                            spawnParticles(en.mesh.position.x, 1.5, en.mesh.position.z, 0xff0033, 20, 1.2);
                         }
-                        en.specialCd = 150;
-                    } else if (attackRoll < 0.75) {
-                        for (let s = -2; s <= 2; s++) {
-                            let a = angle + (s * 0.14);
-                            let ebMesh = new THREE.Mesh(new THREE.SphereGeometry(0.35), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
-                            ebMesh.position.set(en.mesh.position.x, 1.3, en.mesh.position.z);
-                            scene.add(ebMesh);
-                            enemyBullets.push({ mesh: ebMesh, vx: Math.cos(a) * (0.58 + bulletSpeedBonus), vz: Math.sin(a) * (0.58 + bulletSpeedBonus), life: 110, dmg: 20, color: 0xffaa00 });
-                        }
-                        en.specialCd = 130;
-                    } else {
-                        en.dashFrames = 28;
-                        en.specialCd = 160;
-                        spawnParticles(en.mesh.position.x, 1.5, en.mesh.position.z, 0xff0033, 20, 1.2);
                     }
                 }
 
-                let moveSpeed = en.dashFrames > 0 ? en.speed * 3.4 : en.speed;
+                let moveSpeed = (en.dashFrames > 0 ? en.speed * 3.4 : en.speed) * speedMultStatus;
                 if (en.dashFrames > 0) en.dashFrames--;
                 en.mesh.position.x += Math.cos(angle) * moveSpeed;
                 en.mesh.position.z += Math.sin(angle) * moveSpeed;
                 en.mesh.rotation.y += 0.015;
 
-            } else if (en.type === 'shooter' && distToTarget < 25 && distToTarget > 10) {
+            } else if (en.type === 'shooter' && distToTarget < 25 && distToTarget > 10 && en.blindTimer <= 0) {
                 en.mesh.lookAt(target.x, en.mesh.position.y, target.z);
                 if (en.attackCd <= 0) {
                     let ebMesh = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({ color: 0x2288ff }));
@@ -1719,18 +2163,19 @@
                     enemyBullets.push({ mesh: ebMesh, vx: Math.cos(angle) * (0.4 + bulletSpeedBonus), vz: Math.sin(angle) * (0.4 + bulletSpeedBonus), life: 100, dmg: 20, color: 0x2288ff });
                     en.attackCd = Math.max(60, 120 - (tier * 15));
                 }
-            } else if (en.type === 'charger' && distToTarget < 13 && en.attackCd <= 0) {
+            } else if (en.type === 'charger' && distToTarget < 13 && en.attackCd <= 0 && en.blindTimer <= 0) {
                 en.speed = en.baseSpeed * 7.5; en.attackCd = 200;
             } else {
-                en.mesh.position.x += Math.cos(angle) * en.speed;
-                en.mesh.position.z += Math.sin(angle) * en.speed;
-                en.mesh.lookAt(target.x, en.mesh.position.y, target.z);
+                en.mesh.position.x += Math.cos(angle) * en.speed * speedMultStatus;
+                en.mesh.position.z += Math.sin(angle) * en.speed * speedMultStatus;
+                if (en.blindTimer <= 0) en.mesh.lookAt(target.x, en.mesh.position.y, target.z);
                 if (en.type === 'charger' && en.attackCd > 150) en.speed *= 0.9;
                 else if (en.type === 'charger') en.speed = en.baseSpeed;
             }
 
             if (en.attackCd > 0) en.attackCd--;
 
+            // Colisão Corpo-a-Corpo contra P1, P2 e Aliados
             let hitRadius = en.type === 'boss' ? 3.2 : (en.type === 'tank' ? 2.5 : 1.5);
             let agentsToCheck = isCoop ? [p1, p2] : [p1];
 
@@ -1742,11 +2187,27 @@
                         ag.x = en.mesh.position.x + Math.cos(pushAngle) * 3.3;
                         ag.z = en.mesh.position.z + Math.sin(pushAngle) * 3.3;
                     }
-                    if (!ag.downed && en.attackCd <= 0) {
+                    if (!ag.downed && en.attackCd <= 0 && en.blindTimer <= 0) {
                         let dmg = en.type === 'boss' ? 35 : (en.type === 'tank' ? 25 : (en.type === 'charger' && en.speed > en.baseSpeed * 2 ? 20 : 12));
                         damageAgent(ag, dmg);
                         applyKnockback(en, ag.x, ag.z, 2.0);
                         en.attackCd = 60;
+                    }
+                }
+            }
+
+            // Dano corpo-a-corpo aos Aliados Recrutados
+            for (let al of allies) {
+                if (al.respawnTimer > 0) continue;
+                let dAl = Math.hypot(al.x - en.mesh.position.x, al.z - en.mesh.position.z);
+                if (dAl < hitRadius && en.attackCd <= 0 && en.blindTimer <= 0) {
+                    al.hp -= 15;
+                    applyKnockback(en, al.x, al.z, 2.0);
+                    en.attackCd = 60;
+                    if (al.hp <= 0) {
+                        al.respawnTimer = 900; // Retorna em 15 segundos
+                        spawnParticles(al.x, 1.2, al.z, 0x64ffda, 20, 1.0);
+                        showDamageText(al.x, 2.2, al.z, "ALIADO RECUANDO (15s)", "#64ffda");
                     }
                 }
             }
@@ -1775,16 +2236,38 @@
                         ag.hp = Math.min(ag.maxHp, ag.hp + ag.vampirism);
                     }
                 });
+                allies.forEach(al => {
+                    if (al.respawnTimer <= 0) al.hp = Math.min(al.maxHp, al.hp + 15);
+                });
                 updateUI();
-            } else {
-                let colorRatio = en.hp / en.maxHp;
-                if (en.type === 'grunt') en.mesh.material.color.setRGB(1, colorRatio, colorRatio);
+            } else if (en.type !== 'boss' && en.mesh.material) {
+                if (en.blindTimer > 0) en.mesh.material.color.setHex(0xe0f7fa);
+                else if (en.burnTimer > 0) en.mesh.material.color.setHex(0xff5500);
+                else if (en.chillTimer > 0) en.mesh.material.color.setHex(0x00e5ff);
+                else {
+                    let colorRatio = en.hp / en.maxHp;
+                    if (en.type === 'grunt') en.mesh.material.color.setRGB(1, colorRatio, colorRatio);
+                    else en.mesh.material.color.setHex(en.color);
+                }
             }
         }
 
         updateBossHUD(activeBoss);
         if (isCoop) updateUI();
         sendWorldStateToClient();
+    }
+
+    function applyQuantumBounce(b) {
+        b.bouncesLeft--;
+        b.bouncesDone++;
+        b.vx *= 0.85; // Perde força a cada rebatida
+        b.vz *= 0.85;
+        b.critBonus += 0.15; // Ganha +15% de dano crítico por rebatida
+        b.critChance = Math.min(1.0, b.critChance + 0.35);
+        b.colorHex = 0xff00ff;
+        if (b.mesh && b.mesh.material) b.mesh.material.color.setHex(0xff00ff);
+        b.hitTargets.clear();
+        spawnParticles(b.mesh.position.x, 1.2, b.mesh.position.z, 0xd500f9, 8, 0.7);
     }
 
     function updateClient() {
@@ -1819,6 +2302,13 @@
 
         updateRigVisuals(p1, rig1);
         updateRigVisuals(p2, rig2);
+
+        for (let entry of clientAllyMap.values()) {
+            entry.rig.group.position.x += (entry.tx - entry.rig.group.position.x) * 0.35;
+            entry.rig.group.position.z += (entry.tz - entry.rig.group.position.z) * 0.35;
+            entry.rig.group.rotation.y = Math.atan2(Math.sin(entry.tangle), Math.cos(entry.tangle)) * -1 + Math.PI / 2;
+            entry.rig.reviveRing.rotation.z += 0.03;
+        }
 
         for (let entry of clientEnemyMap.values()) {
             entry.mesh.position.x += (entry.tx - entry.mesh.position.x) * 0.35;
