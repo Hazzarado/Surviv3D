@@ -444,7 +444,6 @@
     let conn = null;
     let netTick = 0;
 
-    // Controle robusto de Level-Up Co-op (evita travamento por perda de pacote)
     let currentLevelUpId = 0;
     let clientOpenedLevelUpId = 0;
     let clientPendingUpgrade = null;
@@ -554,7 +553,6 @@
 
         if (!peer) peer = new Peer();
         peer.on('open', () => {
-            // reliable: true garante que pacotes de upgrade e eventos nunca sejam perdidos
             conn = peer.connect(rawCode, { reliable: true });
             isCoop = true;
             isHost = false;
@@ -889,7 +887,7 @@
         });
     }
 
-    // ================= XP & UPGRADES (SINCRONIZADOS E À PROVA DE TRAVAMENTO) =================
+    // ================= XP & UPGRADES (CORRIGIDO) =================
     function addXp(amount) {
         squad.xp += amount;
         if (squad.xp >= squad.maxXp) {
@@ -917,16 +915,18 @@
         p1.waitingUpgrade = true;
         document.getElementById('force-resume-btn').style.display = 'none';
 
+        if (isCoop && conn && conn.open) {
+            p2.waitingUpgrade = true;
+            conn.send({ type: 'openUpgrade', levelUpId: currentLevelUpId, stacks: p2.stacks });
+        } else {
+            p2.waitingUpgrade = false;
+        }
+
         openUpgradeCardsForAgent(p1, (key) => {
             applyUpgradeToAgent(p1, key);
             p1.waitingUpgrade = false;
             checkAllUpgradesDone();
         });
-
-        if (isCoop && conn && conn.open) {
-            p2.waitingUpgrade = true;
-            conn.send({ type: 'openUpgrade', levelUpId: currentLevelUpId, stacks: p2.stacks });
-        }
     }
 
     function applyUpgradeToAgent(agent, key) {
@@ -945,7 +945,8 @@
             gameState = 'PLAYING';
             updateUI();
             sendWorldStateToClient(true);
-        } else {
+        } else if (!p1.waitingUpgrade && p2.waitingUpgrade) {
+            // Host escolheu primeiro: limpa os cards do Host e aguarda o Client
             document.getElementById('upgrade-options').innerHTML = '';
             document.getElementById('upgrade-subtitle').innerText = 'Aguardando parceiro escolher aprimoramento...';
             if (!hostFailsafeTimer) {
@@ -955,6 +956,9 @@
                     }
                 }, 6000);
             }
+        } else if (p1.waitingUpgrade && !p2.waitingUpgrade) {
+            // Parceiro (Client) escolheu primeiro: mantém os cards do Host visíveis!
+            document.getElementById('upgrade-subtitle').innerText = '✅ Parceiro já escolheu! Selecione o seu aprimoramento:';
         }
     }
 
@@ -1229,7 +1233,6 @@
             if (data.reload) remoteInput.reload = true;
             if (data.slot) remoteInput.slot = data.slot;
         } else if (data.type === 'pickUpgrade') {
-            // Aceita apenas se ainda estiver aguardando para este levelUpId (evita duplicação no retry)
             if (!p2.waitingUpgrade) return;
             if (data.levelUpId && data.levelUpId !== currentLevelUpId) return;
 
@@ -1301,13 +1304,11 @@
     }
 
     function applySnapshotOnClient(snap) {
-        // Para o retry se o Host já confirmou que o upgrade do Client foi processado
         if (!snap.p2Waiting && clientPendingUpgrade) {
             clientPendingUpgrade = null;
             if (clientUpgradeRetryTimer) { clearInterval(clientUpgradeRetryTimer); clientUpgradeRetryTimer = null; }
         }
 
-        // Se o estado está em UPGRADE e o Client ainda não abriu os cards deste levelUpId, abre agora
         if (snap.gameState === 'UPGRADE' && snap.p2Waiting && clientOpenedLevelUpId !== snap.levelUpId) {
             startClientUpgradeFlow(snap.levelUpId, snap.p2Stacks);
         }
@@ -1502,7 +1503,6 @@
 
     // ================= MAIN LOOP =================
     function updateHost() {
-        // Continua enviando o estado mesmo durante UPGRADE para manter Host e Client sincronizados
         if (gameState === 'UPGRADE') {
             sendWorldStateToClient();
             return;
