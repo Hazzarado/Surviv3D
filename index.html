@@ -205,6 +205,7 @@
         <h2 style="font-size: 40px;">⚡ SUPRIMENTO TÁTICO</h2>
         <p id="upgrade-subtitle" style="color:#aaa; margin-bottom:25px; font-size: 18px;">Selecione um aprimoramento de campo</p>
         <div class="upgrade-grid" id="upgrade-options"></div>
+        <button id="force-resume-btn" class="menu-btn amber" style="display: none; margin-top: 25px; font-size: 14px; padding: 10px 24px;" onclick="forceResumeFromUpgrade()">FORÇAR CONTINUAÇÃO</button>
     </div>
 
     <!-- GAME OVER -->
@@ -303,7 +304,6 @@
     gridHelper.material.transparent = true;
     scene.add(gridHelper);
 
-    // Dicionário de Armas Modernas
     const weapons = {
         pistol: { name: 'Pistola 9mm', type: 'gun', damage: 15, fireRate: 280, ammo: 15, reloadTime: 1000, bulletSpeed: 1.2, spread: 0.02, color: 0x00ffcc, pellets: 1, pierce: 0, shake: 0.1 },
         smg: { name: 'Vector SMG', type: 'gun', damage: 9, fireRate: 90, ammo: 40, reloadTime: 1400, bulletSpeed: 1.3, spread: 0.08, color: 0xffaa00, pellets: 1, pierce: 0, shake: 0.1 },
@@ -316,7 +316,6 @@
         axe: { name: 'Machado Tomahawk', type: 'melee', damage: 90, fireRate: 800, ammo: 999, reloadTime: 0, range: 4.5, color: 0xffaa00, arc: 360, knockback: 4.0, shake: 0.6 }
     };
 
-    // Construtor de Avatar 3D para P1 e P2
     function createAgentRig(bodyHex, visorHex) {
         let group = new THREE.Group();
         let body = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.8, 16), new THREE.MeshStandardMaterial({ color: bodyHex, roughness: 0.5, metalness: 0.2 }));
@@ -334,7 +333,6 @@
         mLight.position.set(0, 0, 1.5);
         gunGrp.add(mLight);
 
-        // Anel de Reanimação (visível quando caído)
         let reviveRing = new THREE.Mesh(
             new THREE.RingGeometry(2.8, 3.2, 32),
             new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.75 })
@@ -439,13 +437,19 @@
     let p1 = createAgentState(-2, 0);
     let p2 = createAgentState(2, 0);
 
-    // Estado Global do Esquadrão & Rede
     let squad = { kills: 0, level: 1, xp: 0, maxXp: 4 };
     let isCoop = false;
     let isHost = true;
     let peer = null;
     let conn = null;
     let netTick = 0;
+
+    // Controle robusto de Level-Up Co-op (evita travamento por perda de pacote)
+    let currentLevelUpId = 0;
+    let clientOpenedLevelUpId = 0;
+    let clientPendingUpgrade = null;
+    let clientUpgradeRetryTimer = null;
+    let hostFailsafeTimer = null;
 
     let remoteInput = { keys: {}, aimAngle: 0, mouseDown: false, dash: false, reload: false, slot: null };
     let clientInterp = {
@@ -550,7 +554,8 @@
 
         if (!peer) peer = new Peer();
         peer.on('open', () => {
-            conn = peer.connect(rawCode, { reliable: false });
+            // reliable: true garante que pacotes de upgrade e eventos nunca sejam perdidos
+            conn = peer.connect(rawCode, { reliable: true });
             isCoop = true;
             isHost = false;
 
@@ -588,7 +593,6 @@
         rig2.group.visible = true;
         launchArena();
 
-        // Envia pacote inicial com obstáculos gerados pelo Host
         const obsData = obstacles.map(o => ({ x: o.mesh.position.x, z: o.mesh.position.z }));
         conn.send({ type: 'start', obstacles: obsData });
     }
@@ -885,11 +889,11 @@
         });
     }
 
-    // ================= XP & UPGRADES =================
+    // ================= XP & UPGRADES (SINCRONIZADOS E À PROVA DE TRAVAMENTO) =================
     function addXp(amount) {
         squad.xp += amount;
         if (squad.xp >= squad.maxXp) {
-            squad.xp = 0;
+            squad.xp -= squad.maxXp;
             squad.level++;
             squad.maxXp = Math.floor(squad.maxXp * 1.55);
 
@@ -909,7 +913,10 @@
 
     function triggerSquadLevelUp() {
         gameState = 'UPGRADE';
+        currentLevelUpId++;
         p1.waitingUpgrade = true;
+        document.getElementById('force-resume-btn').style.display = 'none';
+
         openUpgradeCardsForAgent(p1, (key) => {
             applyUpgradeToAgent(p1, key);
             p1.waitingUpgrade = false;
@@ -918,11 +925,12 @@
 
         if (isCoop && conn && conn.open) {
             p2.waitingUpgrade = true;
-            conn.send({ type: 'openUpgrade', stacks: p2.stacks });
+            conn.send({ type: 'openUpgrade', levelUpId: currentLevelUpId, stacks: p2.stacks });
         }
     }
 
     function applyUpgradeToAgent(agent, key) {
+        if (!key) return;
         let up = upgradesConfig[key];
         if (!up || agent.stacks[key] >= up.max) return;
         up.apply(agent);
@@ -931,13 +939,30 @@
 
     function checkAllUpgradesDone() {
         if (!p1.waitingUpgrade && (!isCoop || !p2.waitingUpgrade)) {
+            if (hostFailsafeTimer) { clearTimeout(hostFailsafeTimer); hostFailsafeTimer = null; }
+            document.getElementById('force-resume-btn').style.display = 'none';
             document.getElementById('upgrade-screen').style.display = 'none';
             gameState = 'PLAYING';
             updateUI();
+            sendWorldStateToClient(true);
         } else {
             document.getElementById('upgrade-options').innerHTML = '';
             document.getElementById('upgrade-subtitle').innerText = 'Aguardando parceiro escolher aprimoramento...';
+            if (!hostFailsafeTimer) {
+                hostFailsafeTimer = setTimeout(() => {
+                    if (gameState === 'UPGRADE' && p2.waitingUpgrade) {
+                        document.getElementById('force-resume-btn').style.display = 'inline-block';
+                    }
+                }, 6000);
+            }
         }
+    }
+
+    function forceResumeFromUpgrade() {
+        if (!isHost) return;
+        p1.waitingUpgrade = false;
+        p2.waitingUpgrade = false;
+        checkAllUpgradesDone();
     }
 
     function openUpgradeCardsForAgent(agent, onSelectCallback) {
@@ -962,6 +987,38 @@
             optionsDiv.appendChild(card);
         });
         document.getElementById('upgrade-screen').style.display = 'flex';
+    }
+
+    function startClientUpgradeFlow(levelUpId, stacks) {
+        if (clientOpenedLevelUpId === levelUpId) return;
+        clientOpenedLevelUpId = levelUpId;
+        p2.stacks = stacks || p2.stacks;
+        gameState = 'UPGRADE';
+
+        openUpgradeCardsForAgent(p2, (key) => {
+            clientPendingUpgrade = { levelUpId, key };
+            sendPendingClientUpgrade();
+
+            if (clientUpgradeRetryTimer) clearInterval(clientUpgradeRetryTimer);
+            clientUpgradeRetryTimer = setInterval(sendPendingClientUpgrade, 250);
+
+            document.getElementById('upgrade-options').innerHTML = '';
+            document.getElementById('upgrade-subtitle').innerText = 'Aguardando Host iniciar próxima onda...';
+        });
+    }
+
+    function sendPendingClientUpgrade() {
+        if (!clientPendingUpgrade) {
+            if (clientUpgradeRetryTimer) { clearInterval(clientUpgradeRetryTimer); clientUpgradeRetryTimer = null; }
+            return;
+        }
+        if (conn && conn.open) {
+            conn.send({
+                type: 'pickUpgrade',
+                levelUpId: clientPendingUpgrade.levelUpId,
+                key: clientPendingUpgrade.key
+            });
+        }
     }
 
     // ================= PARTICLES, EXPLOSIONS & LOOT =================
@@ -1112,12 +1169,10 @@
 
             let partner = (agent === p1) ? p2 : p1;
             if (partner.downed) {
-                // Ambos caídos = Fim de jogo
                 triggerGameOver();
                 return;
             }
 
-            // Entra em estado CAÍDO (Downed)
             agent.downed = true;
             agent.bleedout = agent.maxBleedout;
             agent.reviveProgress = 0;
@@ -1139,12 +1194,12 @@
 
             let rescuer = (ag === p1) ? p2 : p1;
             if (!rescuer.downed && Math.hypot(rescuer.x - ag.x, rescuer.z - ag.z) <= 3.3) {
-                ag.reviveProgress += 1; // 180 frames = 3 segundos
+                ag.reviveProgress += 1;
                 if (ag.reviveProgress >= 180) {
                     ag.downed = false;
                     ag.reviveProgress = 0;
                     ag.hp = Math.floor(ag.maxHp * 0.5);
-                    ag.invuln = 120; // 2s de invulnerabilidade após levantar
+                    ag.invuln = 120;
                     spawnParticles(ag.x, 1.2, ag.z, 0x00ffcc, 30, 1.2);
                     showDamageText(ag.x, 2.5, ag.z, "REANIMADO!", "#00ffcc");
                 }
@@ -1174,6 +1229,10 @@
             if (data.reload) remoteInput.reload = true;
             if (data.slot) remoteInput.slot = data.slot;
         } else if (data.type === 'pickUpgrade') {
+            // Aceita apenas se ainda estiver aguardando para este levelUpId (evita duplicação no retry)
+            if (!p2.waitingUpgrade) return;
+            if (data.levelUpId && data.levelUpId !== currentLevelUpId) return;
+
             if (data.key) applyUpgradeToAgent(p2, data.key);
             p2.waitingUpgrade = false;
             checkAllUpgradesDone();
@@ -1187,13 +1246,7 @@
         } else if (data.type === 'state') {
             applySnapshotOnClient(data);
         } else if (data.type === 'openUpgrade') {
-            p2.stacks = data.stacks;
-            gameState = 'UPGRADE';
-            openUpgradeCardsForAgent(p2, (key) => {
-                if (conn && conn.open) conn.send({ type: 'pickUpgrade', key });
-                document.getElementById('upgrade-options').innerHTML = '';
-                document.getElementById('upgrade-subtitle').innerText = 'Aguardando Host iniciar próxima onda...';
-            });
+            startClientUpgradeFlow(data.levelUpId, data.stacks);
         } else if (data.type === 'tierAlert') {
             squad.level = data.level;
             showTierAlert(data.tier);
@@ -1206,10 +1259,10 @@
         }
     }
 
-    function sendWorldStateToClient() {
+    function sendWorldStateToClient(forceNow = false) {
         if (!isHost || !isCoop || !conn || !conn.open) return;
         netTick++;
-        if (netTick % 2 !== 0) return; // ~30 snapshots/seg
+        if (!forceNow && netTick % 2 !== 0) return;
 
         const packAgent = (ag) => ({
             x: +ag.x.toFixed(2), z: +ag.z.toFixed(2), angle: +ag.angle.toFixed(2),
@@ -1223,6 +1276,9 @@
         conn.send({
             type: 'state',
             gameState,
+            levelUpId: currentLevelUpId,
+            p2Waiting: p2.waitingUpgrade,
+            p2Stacks: p2.stacks,
             p1: packAgent(p1),
             p2: packAgent(p2),
             squad,
@@ -1245,8 +1301,21 @@
     }
 
     function applySnapshotOnClient(snap) {
+        // Para o retry se o Host já confirmou que o upgrade do Client foi processado
+        if (!snap.p2Waiting && clientPendingUpgrade) {
+            clientPendingUpgrade = null;
+            if (clientUpgradeRetryTimer) { clearInterval(clientUpgradeRetryTimer); clientUpgradeRetryTimer = null; }
+        }
+
+        // Se o estado está em UPGRADE e o Client ainda não abriu os cards deste levelUpId, abre agora
+        if (snap.gameState === 'UPGRADE' && snap.p2Waiting && clientOpenedLevelUpId !== snap.levelUpId) {
+            startClientUpgradeFlow(snap.levelUpId, snap.p2Stacks);
+        }
+
         if (gameState !== 'GAMEOVER') gameState = snap.gameState;
-        if (gameState === 'PLAYING') document.getElementById('upgrade-screen').style.display = 'none';
+        if (gameState === 'PLAYING') {
+            document.getElementById('upgrade-screen').style.display = 'none';
+        }
 
         Object.assign(p1, snap.p1, { currentWeapon: snap.p1.wep, isReloading: snap.p1.reloading, dashCooldown: snap.p1.dashCd, maxDashCooldown: snap.p1.maxDashCd, reviveProgress: snap.p1.revive, meleeAnimProgress: snap.p1.meleeAnim });
         Object.assign(p2, snap.p2, { currentWeapon: snap.p2.wep, isReloading: snap.p2.reloading, dashCooldown: snap.p2.dashCd, maxDashCooldown: snap.p2.maxDashCd, reviveProgress: snap.p2.revive, meleeAnimProgress: snap.p2.meleeAnim });
@@ -1258,14 +1327,12 @@
         buildWeaponModelForRig(rig1, p1.currentWeapon);
         buildWeaponModelForRig(rig2, p2.currentWeapon);
 
-        // Sincroniza obstáculos destruídos pelo Boss
         if (obstacles.length !== snap.obsCount) {
             obstacles.forEach(o => scene.remove(o.mesh));
             obstacles = [];
             snap.obsPositions.forEach(pos => createObstacleMesh(pos.x, pos.z));
         }
 
-        // Sincroniza Inimigos & Boss
         const seenEnemyIds = new Set();
         let activeBoss = null;
 
@@ -1294,11 +1361,9 @@
             }
         }
 
-        // Sincroniza Projéteis
         syncSimpleSpherePool(clientBulletMeshes, snap.bullets, 0.16);
         syncSimpleSpherePool(clientEnemyBulletMeshes, snap.eBullets, 0.32);
 
-        // Sincroniza Loot
         const seenLootIds = new Set();
         snap.loot.forEach(ld => {
             seenLootIds.add(ld.id);
@@ -1398,7 +1463,6 @@
                 pText.style.color = isHost ? '#ffaa00' : '#00ffcc';
             }
 
-            // Banner de Revive
             const revBanner = document.getElementById('revive-banner');
             if (partner.downed) {
                 revBanner.style.display = 'flex';
@@ -1438,6 +1502,11 @@
 
     // ================= MAIN LOOP =================
     function updateHost() {
+        // Continua enviando o estado mesmo durante UPGRADE para manter Host e Client sincronizados
+        if (gameState === 'UPGRADE') {
+            sendWorldStateToClient();
+            return;
+        }
         if (gameState !== 'PLAYING') return;
 
         let tier = getThreatTier();
@@ -1450,14 +1519,12 @@
             if (tier >= 1 || isCoop || Math.random() < 0.45) spawnEnemy();
         }
 
-        // Atualiza P1 (Local Host)
-        moveAgentFromInputs(p1, keys, mouse.down);
+        moveAgentFromInputs(p1, keys);
         raycaster.setFromCamera(mouse, camera);
         raycaster.ray.intersectPlane(mousePlane, intersectionPoint);
         p1.angle = Math.atan2(intersectionPoint.z - p1.z, intersectionPoint.x - p1.x);
         processAgentAttack(p1, rig1, mouse.down);
 
-        // Atualiza P2 (Remote Client)
         if (isCoop) {
             if (remoteInput.slot === '1' && weapons[p2.currentWeapon].type === 'melee') {
                 switchAgentWeapon(p2, rig2, p2.lastGun);
@@ -1475,7 +1542,7 @@
             }
             remoteInput.dash = false;
 
-            moveAgentFromInputs(p2, remoteInput.keys, remoteInput.mouseDown);
+            moveAgentFromInputs(p2, remoteInput.keys);
             p2.angle = remoteInput.aimAngle;
             processAgentAttack(p2, rig2, remoteInput.mouseDown);
             updateReviveSystem();
@@ -1487,7 +1554,6 @@
         updateDashBar(p1);
         updateCamera(p1);
 
-        // Fogo no chão
         for (let i = fireZones.length - 1; i >= 0; i--) {
             let fz = fireZones[i]; fz.life--;
             for (let en of enemies) {
@@ -1501,7 +1567,6 @@
 
         updateParticles();
 
-        // Projéteis dos Agentes
         for (let i = bullets.length - 1; i >= 0; i--) {
             let b = bullets[i];
             b.mesh.position.x += b.vx; b.mesh.position.z += b.vz; b.life--;
@@ -1542,7 +1607,6 @@
             }
         }
 
-        // Projéteis Inimigos
         for (let i = enemyBullets.length - 1; i >= 0; i--) {
             let eb = enemyBullets[i];
             eb.mesh.position.x += eb.vx; eb.mesh.position.z += eb.vz; eb.life--;
@@ -1559,7 +1623,6 @@
             if (hitObs || eb.life <= 0) { scene.remove(eb.mesh); enemyBullets.splice(i, 1); }
         }
 
-        // Coleta de Loot
         for (let i = lootDrops.length - 1; i >= 0; i--) {
             let l = lootDrops[i];
             l.mesh.rotation.y += l.rotSpeed; l.mesh.rotation.x += l.rotSpeed;
@@ -1580,14 +1643,12 @@
             }
         }
 
-        // IA dos Inimigos & Boss
         let activeBoss = null;
         let bulletSpeedBonus = tier * 0.12;
 
         for (let i = enemies.length - 1; i >= 0; i--) {
             let en = enemies[i];
 
-            // Escolhe o alvo vivo mais próximo
             let target = p1;
             if (isCoop) {
                 if (p1.downed && !p2.downed) target = p2;
@@ -1670,7 +1731,6 @@
 
             if (en.attackCd > 0) en.attackCd--;
 
-            // Colisão Corpo-a-Corpo contra P1 e P2
             let hitRadius = en.type === 'boss' ? 3.2 : (en.type === 'tank' ? 2.5 : 1.5);
             let agentsToCheck = isCoop ? [p1, p2] : [p1];
 
@@ -1730,12 +1790,10 @@
     function updateClient() {
         if (gameState !== 'PLAYING' && gameState !== 'UPGRADE') return;
 
-        // Calcula mira local do Agente 2
         raycaster.setFromCamera(mouse, camera);
         raycaster.ray.intersectPlane(mousePlane, intersectionPoint);
         const myAimAngle = Math.atan2(intersectionPoint.z - p2.z, intersectionPoint.x - p2.x);
 
-        // Envia inputs continuamente ao Host
         if (conn && conn.open) {
             conn.send({
                 type: 'input',
@@ -1751,14 +1809,13 @@
             remoteInput.slot = null;
         }
 
-        // Interpola suavemente posições recebidas do Host
         p1.x += (clientInterp.p1.x - p1.x) * 0.35;
         p1.z += (clientInterp.p1.z - p1.z) * 0.35;
         p1.angle = clientInterp.p1.angle;
 
         p2.x += (clientInterp.p2.x - p2.x) * 0.35;
         p2.z += (clientInterp.p2.z - p2.z) * 0.35;
-        p2.angle = myAimAngle; // Resposta instantânea da própria mira
+        p2.angle = myAimAngle;
 
         updateRigVisuals(p1, rig1);
         updateRigVisuals(p2, rig2);
@@ -1787,7 +1844,7 @@
         if (agent.dashCooldown > 0) agent.dashCooldown--;
         if (agent.invuln > 0) agent.invuln--;
 
-        if (agent.downed) return; // Jogador caído não anda
+        if (agent.downed) return;
 
         let dx = 0, dz = 0;
         if (inputKeys['w'] || inputKeys['arrowup']) dz -= 1;
